@@ -34,7 +34,6 @@ import (
 
 	"github.com/golang/groupcache/lru"
 	"github.com/grafov/m3u8"
-	// "github.com/kr/pretty"
 )
 
 const VERSION = "1.0.6"
@@ -47,9 +46,11 @@ var (
 
 func DoRequest(c *http.Client, req *http.Request) (*http.Response, error) {
 	req.Header.Set("User-Agent", USER_AGENT)
-	req.Header.Set("Connection", "Keep-Alive")
+	//req.Header.Set("Connection", "Keep-Alive") //http2不支持Keep-Alive
 	resp, err := c.Do(req)
-
+	if err != nil {
+		return nil, err
+	}
 	// Maybe in the future it will force connection to stay opened for "Connection: close"
 	resp.Close = false
 	resp.Request.Close = false
@@ -76,9 +77,18 @@ func DecryptData(data []byte, v *Download, aes128Keys *map[string][]byte) {
 		keyData = (*aes128Keys)[v.ExtXKey.URI]
 
 		if keyData == nil {
-			req, _ := http.NewRequest("GET", v.ExtXKey.URI, nil)
-			resp, _ := DoRequest(Client, req)
-			keyData, _ = ioutil.ReadAll(resp.Body)
+			req, err := http.NewRequest("GET", v.ExtXKey.URI, nil)
+			if err != nil {
+				log.Println(err)
+			}
+			resp, err := DoRequest(Client, req)
+			if err != nil {
+				log.Println(err)
+			}
+			keyData, err = ioutil.ReadAll(resp.Body)
+			if err != nil {
+				log.Println(err)
+			}
 			resp.Body.Close()
 			(*aes128Keys)[v.ExtXKey.URI] = keyData
 		}
@@ -160,7 +170,7 @@ func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc ch
 		}
 		resp, err := DoRequest(Client, req)
 		if err != nil {
-			log.Print(err)
+			log.Println(err)
 			time.Sleep(time.Duration(3) * time.Second)
 		}
 		playlist, listType, err := m3u8.DecodeFrom(resp.Body, true)
