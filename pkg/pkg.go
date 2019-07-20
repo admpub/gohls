@@ -45,7 +45,7 @@ type Download struct {
 	totalDuration time.Duration
 }
 
-func DecryptData(data []byte, v *Download, aes128Keys *map[string][]byte) {
+func DecryptData(data []byte, v *Download, aes128Keys *map[string][]byte) error {
 	var (
 		iv          *bytes.Buffer
 		keyData     []byte
@@ -83,7 +83,7 @@ func DecryptData(data []byte, v *Download, aes128Keys *map[string][]byte) {
 		cipherBlock, _ = aes.NewCipher((*aes128Keys)[v.ExtXKey.URI])
 		cipher.NewCBCDecrypter(cipherBlock, iv.Bytes()).CryptBlocks(data, data)
 	}
-
+	return nil
 }
 
 func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration) error {
