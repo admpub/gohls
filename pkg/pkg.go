@@ -159,56 +159,55 @@ func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc ch
 			return err
 		}
 		resp.Body.Close()
-		if listType == m3u8.MEDIA {
-			mpl := playlist.(*m3u8.MediaPlaylist)
-
-			for segmentIndex, v := range mpl.Segments {
-				if v != nil {
-					var msURI string
-					if strings.HasPrefix(v.URI, "http") {
-						msURI, err = url.QueryUnescape(v.URI)
-						if err != nil {
-							return err
-						}
-					} else {
-						msURL, err := playlistURL.Parse(v.URI)
-						if err != nil {
-							log.Print(err)
-							continue
-						}
-						msURI, err = url.QueryUnescape(msURL.String())
-						if err != nil {
-							return err
-						}
-					}
-					_, hit := cache.Get(msURI)
-					if !hit {
-						cache.Add(msURI, nil)
-						if useLocalTime {
-							recDuration = time.Now().Sub(startTime)
-						} else {
-							recDuration += time.Duration(int64(v.Duration * 1000000000))
-						}
-						dlc <- &Download{
-							URI:           msURI,
-							ExtXKey:       mpl.Key,
-							SeqNo:         uint64(segmentIndex) + mpl.SeqNo,
-							totalDuration: recDuration,
-						}
-					}
-					if recTime != 0 && recDuration != 0 && recDuration >= recTime {
-						close(dlc)
-						return nil
-					}
-				}
-			}
-			if mpl.Closed {
-				close(dlc)
-				return nil
-			}
-			time.Sleep(time.Duration(int64(mpl.TargetDuration * 1000000000)))
-		} else {
+		if listType != m3u8.MEDIA {
 			return errors.New("Not a valid media playlist")
 		}
+		mpl := playlist.(*m3u8.MediaPlaylist)
+
+		for segmentIndex, v := range mpl.Segments {
+			if v != nil {
+				var msURI string
+				if strings.HasPrefix(v.URI, "http") {
+					msURI, err = url.QueryUnescape(v.URI)
+					if err != nil {
+						return err
+					}
+				} else {
+					msURL, err := playlistURL.Parse(v.URI)
+					if err != nil {
+						log.Print(err)
+						continue
+					}
+					msURI, err = url.QueryUnescape(msURL.String())
+					if err != nil {
+						return err
+					}
+				}
+				_, hit := cache.Get(msURI)
+				if !hit {
+					cache.Add(msURI, nil)
+					if useLocalTime {
+						recDuration = time.Now().Sub(startTime)
+					} else {
+						recDuration += time.Duration(int64(v.Duration * 1000000000))
+					}
+					dlc <- &Download{
+						URI:           msURI,
+						ExtXKey:       mpl.Key,
+						SeqNo:         uint64(segmentIndex) + mpl.SeqNo,
+						totalDuration: recDuration,
+					}
+				}
+				if recTime != 0 && recDuration != 0 && recDuration >= recTime {
+					close(dlc)
+					return nil
+				}
+			}
+		}
+		if mpl.Closed {
+			close(dlc)
+			return nil
+		}
+		time.Sleep(time.Duration(int64(mpl.TargetDuration * 1000000000)))
 	}
 }
