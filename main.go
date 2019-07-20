@@ -18,6 +18,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -49,15 +50,14 @@ func main() {
 	if !strings.HasPrefix(flag.Arg(0), "http") {
 		log.Fatal("Media playlist url must begin with http/https")
 	}
-
-	msChan := make(chan *pkg.Download, 1024)
-	go func() {
-		err := pkg.GetPlaylist(flag.Arg(0), *duration, *useLocalTime, msChan)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}()
-	if err := pkg.DownloadSegment(flag.Arg(1), msChan, *duration); err != nil {
+	cfg := &pkg.Config{
+		PlaylistURL:  flag.Arg(0),
+		OutputFile:   flag.Arg(1),
+		Duration:     *duration,
+		UseLocalTime: *useLocalTime,
+	}
+	err := cfg.Get(context.Background())
+	if err != nil {
 		log.Fatal(err)
 	}
 }

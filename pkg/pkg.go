@@ -98,6 +98,11 @@ func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration) error
 		aes128Keys = &map[string][]byte{}
 	)
 
+	defer func() {
+		if e := recover(); e != nil {
+			log.Println(e)
+		}
+	}()
 	for v := range dlc {
 		req, err := http.NewRequest("GET", v.URI, nil)
 		if err != nil {
@@ -143,6 +148,11 @@ func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc ch
 	if err != nil {
 		return err
 	}
+	defer func() {
+		if e := recover(); e != nil {
+			log.Println(e)
+		}
+	}()
 	for {
 		req, err := http.NewRequest("GET", urlStr, nil)
 		if err != nil {
@@ -153,12 +163,14 @@ func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc ch
 			log.Println(err)
 			time.Sleep(time.Duration(3) * time.Second)
 		}
+
 		playlist, listType, err := m3u8.DecodeFrom(resp.Body, true)
 		if err != nil {
 			resp.Body.Close()
 			return err
 		}
 		resp.Body.Close()
+
 		if listType != m3u8.MEDIA {
 			return errors.New("Not a valid media playlist")
 		}
