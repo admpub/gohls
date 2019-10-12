@@ -87,7 +87,7 @@ func DecryptData(data []byte, v *Download, aes128Keys *map[string][]byte) error 
 	return nil
 }
 
-func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration, total *int, finished *int, speedInSecond *float64) error {
+func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration, prog *Progress) error {
 	var out, err = os.Create(fn)
 	defer out.Close()
 
@@ -105,7 +105,7 @@ func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration, total
 		}
 	}()
 	for v := range dlc {
-		(*finished)++
+		prog.FinishedNum++
 		startTime := time.Now()
 		req, err := http.NewRequest("GET", v.URI, nil)
 		if err != nil {
@@ -133,11 +133,12 @@ func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration, total
 			return err
 		}
 
-		processSize := len(fmt.Sprint(*total))
-		*speedInSecond = float64(size) / time.Now().Sub(startTime).Seconds()
-		speedDesc := com.FormatBytes(*speedInSecond)
+		processSize := len(fmt.Sprint(prog.TotalNum))
+		prog.FinishedSize += int64(size)
+		prog.SpeedInSecond = float64(size) / time.Now().Sub(startTime).Seconds()
+		speedDesc := com.FormatBytes(prog.SpeedInSecond)
 
-		log.Printf("[%0*d/%d][%v/s] Downloaded %v\n", processSize, *finished, *total, speedDesc, v.URI)
+		log.Printf("[%0*d/%d][%v/s] Downloaded %v\n", processSize, prog.FinishedNum, prog.TotalNum, speedDesc, v.URI)
 		if recTime != 0 {
 			log.Printf("Recorded %v of %v\n", v.totalDuration, recTime)
 		} else {
@@ -174,7 +175,7 @@ func ParseURI(root *url.URL, uri string) (string, error) {
 	return msURI, err
 }
 
-func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc chan *Download, total *int) error {
+func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc chan *Download, prog *Progress) error {
 	startTime := time.Now()
 	var recDuration time.Duration
 	cache := lru.New(1024)
@@ -218,14 +219,14 @@ func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc ch
 						log.Println(err)
 						continue
 					}
-					return GetPlaylist(msURI, recTime, useLocalTime, dlc, total)
+					return GetPlaylist(msURI, recTime, useLocalTime, dlc, prog)
 				}
 				return ErrInvalidMasterPlaylist
 			}
 			return ErrInvalidMediaPlaylist
 		}
 		mpl := playlist.(*m3u8.MediaPlaylist)
-		*total = len(mpl.Segments)
+		prog.TotalNum = len(mpl.Segments)
 		for segmentIndex, v := range mpl.Segments {
 			if v == nil {
 				continue
