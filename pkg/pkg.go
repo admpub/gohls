@@ -85,7 +85,7 @@ func DecryptData(data []byte, v *Download, aes128Keys *map[string][]byte) error 
 	return nil
 }
 
-func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration) error {
+func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration, finished *int) error {
 	var out, err = os.Create(fn)
 	defer out.Close()
 
@@ -103,6 +103,7 @@ func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration) error
 		}
 	}()
 	for v := range dlc {
+		(*finished)++
 		req, err := http.NewRequest("GET", v.URI, nil)
 		if err != nil {
 			return err
@@ -166,7 +167,7 @@ func ParseURI(root *url.URL, uri string) (string, error) {
 	return msURI, err
 }
 
-func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc chan *Download) error {
+func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc chan *Download, total *int) error {
 	startTime := time.Now()
 	var recDuration time.Duration
 	cache := lru.New(1024)
@@ -210,14 +211,14 @@ func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc ch
 						log.Println(err)
 						continue
 					}
-					return GetPlaylist(msURI, recTime, useLocalTime, dlc)
+					return GetPlaylist(msURI, recTime, useLocalTime, dlc, total)
 				}
 				return ErrInvalidMasterPlaylist
 			}
 			return ErrInvalidMediaPlaylist
 		}
 		mpl := playlist.(*m3u8.MediaPlaylist)
-
+		*total = len(mpl.Segments)
 		for segmentIndex, v := range mpl.Segments {
 			if v == nil {
 				continue
