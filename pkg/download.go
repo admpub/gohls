@@ -19,7 +19,8 @@ type Config struct {
 	OutputFile   string
 	Duration     time.Duration
 	UseLocalTime bool
-	progress     *Progress
+
+	progress *Progress
 }
 
 func (cfg *Config) Get(ctx context.Context) error {
