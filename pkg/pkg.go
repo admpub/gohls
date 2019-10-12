@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/golang/groupcache/lru"
 	"github.com/grafov/m3u8"
+	"github.com/webx-top/com"
 )
 
 var (
@@ -85,7 +87,7 @@ func DecryptData(data []byte, v *Download, aes128Keys *map[string][]byte) error 
 	return nil
 }
 
-func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration, finished *int) error {
+func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration, total *int, finished *int, speedInSecond *float64) error {
 	var out, err = os.Create(fn)
 	defer out.Close()
 
@@ -104,6 +106,7 @@ func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration, finis
 	}()
 	for v := range dlc {
 		(*finished)++
+		startTime := time.Now()
 		req, err := http.NewRequest("GET", v.URI, nil)
 		if err != nil {
 			return err
@@ -123,14 +126,18 @@ func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration, finis
 		resp.Body.Close()
 
 		DecryptData(data, v, aes128Keys)
-
-		_, err = out.Write(data)
+		var size int
+		size, err = out.Write(data)
 		// _, err = io.Copy(out, resp.Body)
 		if err != nil {
 			return err
 		}
 
-		log.Printf("Downloaded %v\n", v.URI)
+		processSize := len(fmt.Sprint(*total))
+		*speedInSecond = float64(size) / time.Now().Sub(startTime).Seconds()
+		speedDesc := com.FormatBytes(*speedInSecond)
+
+		log.Printf("[%0*d/%d][%v/s] Downloaded %v\n", processSize, *finished, *total, speedDesc, v.URI)
 		if recTime != 0 {
 			log.Printf("Recorded %v of %v\n", v.totalDuration, recTime)
 		} else {

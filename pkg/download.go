@@ -7,12 +7,13 @@ import (
 )
 
 type Config struct {
-	PlaylistURL  string
-	OutputFile   string
-	Duration     time.Duration
-	UseLocalTime bool
-	Total        int
-	Finished     int
+	PlaylistURL   string
+	OutputFile    string
+	Duration      time.Duration
+	UseLocalTime  bool
+	Total         int
+	Finished      int
+	SpeedInSecond float64
 }
 
 func (cfg *Config) Get(ctx context.Context) error {
@@ -35,7 +36,7 @@ func Get(ctx context.Context, cfg *Config) error {
 		}
 	}()
 	go func() {
-		done <- DownloadSegment(cfg.OutputFile, msChan, cfg.Duration, &cfg.Finished)
+		done <- DownloadSegment(cfg.OutputFile, msChan, cfg.Duration, &cfg.Total, &cfg.Finished, &cfg.SpeedInSecond)
 	}()
 	for {
 		select {
