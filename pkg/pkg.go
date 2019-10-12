@@ -151,19 +151,35 @@ func IsFullURL(url string) bool {
 	}
 }
 
+func ParseURI(root *url.URL, uri string) (string, error) {
+	msURI, err := url.QueryUnescape(uri)
+	if err != nil {
+		return msURI, err
+	}
+	if !IsFullURL(msURI) {
+		msURL, err := root.Parse(msURI)
+		if err != nil {
+			return msURI, err
+		}
+		msURI, err = url.QueryUnescape(msURL.String())
+	}
+	return msURI, err
+}
+
 func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc chan *Download) error {
 	startTime := time.Now()
 	var recDuration time.Duration
 	cache := lru.New(1024)
-	playlistURL, err := url.Parse(urlStr)
-	if err != nil {
-		return err
-	}
 	defer func() {
 		if e := recover(); e != nil {
 			log.Println(e)
 		}
+		cache.Clear()
 	}()
+	playlistURL, err := url.Parse(urlStr)
+	if err != nil {
+		return err
+	}
 	for {
 		req, err := http.NewRequest("GET", urlStr, nil)
 		if err != nil {
@@ -186,22 +202,13 @@ func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc ch
 			if listType == m3u8.MASTER {
 				mpl := playlist.(*m3u8.MasterPlaylist)
 				for _, v := range mpl.Variants {
-					var msURI string
-					if IsFullURL(v.URI) {
-						msURI, err = url.QueryUnescape(v.URI)
-						if err != nil {
-							return err
-						}
-					} else {
-						msURL, err := playlistURL.Parse(v.URI)
-						if err != nil {
-							log.Print(err)
-							continue
-						}
-						msURI, err = url.QueryUnescape(msURL.String())
-						if err != nil {
-							return err
-						}
+					if v == nil {
+						continue
+					}
+					msURI, err := ParseURI(playlistURL, v.URI)
+					if err != nil {
+						log.Println(err)
+						continue
 					}
 					return GetPlaylist(msURI, recTime, useLocalTime, dlc)
 				}
@@ -212,43 +219,32 @@ func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc ch
 		mpl := playlist.(*m3u8.MediaPlaylist)
 
 		for segmentIndex, v := range mpl.Segments {
-			if v != nil {
-				var msURI string
-				if IsFullURL(v.URI) {
-					msURI, err = url.QueryUnescape(v.URI)
-					if err != nil {
-						return err
-					}
+			if v == nil {
+				continue
+			}
+			msURI, err := ParseURI(playlistURL, v.URI)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			_, hit := cache.Get(msURI)
+			if !hit {
+				cache.Add(msURI, nil)
+				if useLocalTime {
+					recDuration = time.Now().Sub(startTime)
 				} else {
-					msURL, err := playlistURL.Parse(v.URI)
-					if err != nil {
-						log.Print(err)
-						continue
-					}
-					msURI, err = url.QueryUnescape(msURL.String())
-					if err != nil {
-						return err
-					}
+					recDuration += time.Duration(int64(v.Duration * 1000000000))
 				}
-				_, hit := cache.Get(msURI)
-				if !hit {
-					cache.Add(msURI, nil)
-					if useLocalTime {
-						recDuration = time.Now().Sub(startTime)
-					} else {
-						recDuration += time.Duration(int64(v.Duration * 1000000000))
-					}
-					dlc <- &Download{
-						URI:           msURI,
-						ExtXKey:       mpl.Key,
-						SeqNo:         uint64(segmentIndex) + mpl.SeqNo,
-						totalDuration: recDuration,
-					}
+				dlc <- &Download{
+					URI:           msURI,
+					ExtXKey:       mpl.Key,
+					SeqNo:         uint64(segmentIndex) + mpl.SeqNo,
+					totalDuration: recDuration,
 				}
-				if recTime != 0 && recDuration != 0 && recDuration >= recTime {
-					close(dlc)
-					return nil
-				}
+			}
+			if recTime != 0 && recDuration != 0 && recDuration >= recTime {
+				close(dlc)
+				return nil
 			}
 		}
 		if mpl.Closed {
