@@ -2,6 +2,7 @@ package pkg
 
 import (
 	"context"
+	"io"
 	"log"
 	"time"
 )
@@ -21,6 +22,7 @@ type Config struct {
 	UseLocalTime bool
 
 	progress *Progress
+	reader   io.Reader
 }
 
 func (cfg *Config) Get(ctx context.Context) error {
@@ -31,7 +33,7 @@ func (cfg *Config) Progress() *Progress {
 	return cfg.progress
 }
 
-func Get(ctx context.Context, cfg *Config) error {
+func Get(ctx context.Context, cfg *Config, reader ...io.Reader) error {
 	cfg.progress = &Progress{}
 	msChan := make(chan *Download, 1024)
 	done := make(chan error)
@@ -41,7 +43,17 @@ func Get(ctx context.Context, cfg *Config) error {
 	}
 	var err error
 	go func() {
-		err = GetPlaylist(cfg.PlaylistURL, cfg.Duration, cfg.UseLocalTime, msChan, cfg.progress)
+		if len(reader) > 0 && reader[0] != nil {
+			c, err := NewContext(cfg.PlaylistURL, 1024)
+			if err != nil {
+				log.Println(err)
+				closeChan()
+				return
+			}
+			err = cfg.GetPlaylistFromReader(c, reader[0], msChan)
+		} else {
+			err = cfg.GetPlaylist(cfg.PlaylistURL, msChan)
+		}
 		if err != nil {
 			log.Println(err)
 			closeChan()
