@@ -25,8 +25,8 @@ type Config struct {
 	reader   io.Reader
 }
 
-func (cfg *Config) Get(ctx context.Context) error {
-	return Get(ctx, cfg)
+func (cfg *Config) Get(ctx context.Context, reader ...io.Reader) error {
+	return Get(ctx, cfg, reader...)
 }
 
 func (cfg *Config) Progress() *Progress {
