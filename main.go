@@ -23,31 +23,30 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/admpub/gohls/pkg"
 )
 
-const VERSION = "1.0.6"
+const VERSION = "1.0.7"
 
 func main() {
 
 	duration := flag.Duration("t", time.Duration(0), "Recording duration (0 == infinite)")
 	useLocalTime := flag.Bool("l", false, "Use local time to track duration instead of supplied metadata")
-	flag.StringVar(&pkg.USER_AGENT, "ua", fmt.Sprintf("gohls/%v", VERSION), "User-Agent for HTTP Client")
+	flag.StringVar(&pkg.UserAgent, "ua", fmt.Sprintf("gohls/%v", VERSION), "User-Agent for HTTP Client")
 	flag.Parse()
 
 	os.Stderr.Write([]byte(fmt.Sprintf("gohls %v - HTTP Live Streaming (HLS) downloader\n", VERSION)))
 	os.Stderr.Write([]byte("Copyright (C) 2013 GoHLS Authors. Licensed for use under the GNU GPL version 3.\n"))
 
 	if flag.NArg() < 2 {
-		os.Stderr.Write([]byte("Usage: gohls [-l=bool] [-t duration] [-ua user-agent] media-playlist-url output-file\n"))
+		os.Stderr.Write([]byte("Usage: gohls [-l=bool] [-t duration] [-ua user-agent] media-playlist-url output-file.ts\n"))
 		flag.PrintDefaults()
 		os.Exit(2)
 	}
 
-	if !strings.HasPrefix(flag.Arg(0), "http") {
+	if !pkg.IsFullURL(flag.Arg(0)) {
 		log.Fatal("Media playlist url must begin with http/https")
 	}
 	cfg := &pkg.Config{

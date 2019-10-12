@@ -5,7 +5,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
-	"errors"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -19,13 +18,13 @@ import (
 )
 
 var (
-	USER_AGENT     = "Mozilla/5.0 (X11; Linux x86_64; rv:38.0) Gecko/38.0 Firefox/38.0"
-	Client         = &http.Client{}
-	IV_placeholder = []byte{0, 0, 0, 0, 0, 0, 0, 0}
+	UserAgent     = "Mozilla/5.0 (X11; Linux x86_64; rv:38.0) Gecko/38.0 Firefox/38.0"
+	Client        = &http.Client{}
+	IVPlaceholder = []byte{0, 0, 0, 0, 0, 0, 0, 0}
 )
 
 func DoRequest(c *http.Client, req *http.Request) (*http.Response, error) {
-	req.Header.Set("User-Agent", USER_AGENT)
+	req.Header.Set("User-Agent", UserAgent)
 	//req.Header.Set("Connection", "Keep-Alive") //http2不支持Keep-Alive
 	resp, err := c.Do(req)
 	if err != nil {
@@ -73,8 +72,8 @@ func DecryptData(data []byte, v *Download, aes128Keys *map[string][]byte) error 
 			(*aes128Keys)[v.ExtXKey.URI] = keyData
 		}
 
-		if v.ExtXKey.IV == "" {
-			iv = bytes.NewBuffer(IV_placeholder)
+		if len(v.ExtXKey.IV) == 0 {
+			iv = bytes.NewBuffer(IVPlaceholder)
 			binary.Write(iv, binary.BigEndian, v.SeqNo)
 		} else {
 			iv = bytes.NewBufferString(v.ExtXKey.IV)
@@ -140,6 +139,18 @@ func DownloadSegment(fn string, dlc chan *Download, recTime time.Duration) error
 	return nil
 }
 
+func IsFullURL(url string) bool {
+	if len(url) < 8 {
+		return false
+	}
+	switch strings.ToLower(url[0:7]) {
+	case `https:/`, `http://`:
+		return true
+	default:
+		return false
+	}
+}
+
 func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc chan *Download) error {
 	startTime := time.Now()
 	var recDuration time.Duration
@@ -172,14 +183,38 @@ func GetPlaylist(urlStr string, recTime time.Duration, useLocalTime bool, dlc ch
 		resp.Body.Close()
 
 		if listType != m3u8.MEDIA {
-			return errors.New("Not a valid media playlist")
+			if listType == m3u8.MASTER {
+				mpl := playlist.(*m3u8.MasterPlaylist)
+				for _, v := range mpl.Variants {
+					var msURI string
+					if IsFullURL(v.URI) {
+						msURI, err = url.QueryUnescape(v.URI)
+						if err != nil {
+							return err
+						}
+					} else {
+						msURL, err := playlistURL.Parse(v.URI)
+						if err != nil {
+							log.Print(err)
+							continue
+						}
+						msURI, err = url.QueryUnescape(msURL.String())
+						if err != nil {
+							return err
+						}
+					}
+					return GetPlaylist(msURI, recTime, useLocalTime, dlc)
+				}
+				return ErrInvalidMasterPlaylist
+			}
+			return ErrInvalidMediaPlaylist
 		}
 		mpl := playlist.(*m3u8.MediaPlaylist)
 
 		for segmentIndex, v := range mpl.Segments {
 			if v != nil {
 				var msURI string
-				if strings.HasPrefix(v.URI, "http") {
+				if IsFullURL(v.URI) {
 					msURI, err = url.QueryUnescape(v.URI)
 					if err != nil {
 						return err
