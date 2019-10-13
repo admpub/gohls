@@ -262,11 +262,13 @@ func (cfg *Config) GetPlaylistFromReader(c *Context, reader io.Reader, dlc chan 
 	prog.TotalNum = len(mpl.Segments)
 	for segmentIndex, v := range mpl.Segments {
 		if v == nil {
+			prog.TotalNum--
 			continue
 		}
 		msURI, err := ParseURI(c.playlistURL, v.URI)
 		if err != nil {
 			log.Println(err)
+			prog.TotalNum--
 			continue
 		}
 		_, hit := c.cache.Get(msURI)
